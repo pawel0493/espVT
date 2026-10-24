@@ -84,6 +84,10 @@ Projekt ma domyslnie `CONFIG_APP_NO_BLOBS=y`, aby nie linkowac binarnych
 bibliotek Wi-Fi/Bluetooth. Terminal korzysta z CAN/TWAI, I2C i SPIFFS, wiec ta
 konfiguracja ogranicza niepotrzebne zaleznosci platformy.
 
+Do konwersji `logo.png` podczas budowania potrzebna jest biblioteka Pillow.
+Zainstaluj ja w srodowisku Python ESP-IDF: `python -m pip install pillow`.
+Build dziala na Windows, Linux i macOS.
+
 ```sh
 idf.py set-target esp32s3
 idf.py build
