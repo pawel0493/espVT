@@ -3,8 +3,8 @@
 > **Status:** experimental, unofficial and not ISO 11783 certified. Do not use
 > it as the sole control or safety device for agricultural machinery.
 
-Projekt terminala dostepowego ISOBUS/UT na plytce Waveshare
-ESP32-S3-Touch-LCD-7B z AgIsoStack++.
+Projekt terminala dostępowego ISOBUS/UT na płytkach Waveshare
+ESP32-S3-Touch-LCD-7 oraz ESP32-S3-Touch-LCD-7B z AgIsoStack++.
 
 Repozytorium zawiera również firmware osobnego panelu przycisków AUX-N dla
 ESP32U w katalogu `auxn_buttons_esp32`.
@@ -19,22 +19,35 @@ Docelowo ta aplikacja ma dzialac jako Virtual Terminal Server ISO 11783-6:
 - obsluga address claim przez AgIsoStack++,
 - przyjmowanie i buforowanie object pooli IOP od ECU,
 - AUX-N Type 2: wykrywanie urzadzen wejscia i wysylanie przypisan funkcji,
-- renderowanie aktualnego working setu na LCD 1024x600,
+- renderowanie aktualnego working setu na LCD zależnym od wariantu płytki,
 - wysylanie zdarzen dotyku/przyciskow jako komunikaty VT do ECU,
 - zapis wersji object pooli w pamieci flash/NVS.
 
 ## Sprzet
 
-Plytka ESP32-S3-Touch-LCD-7B ma:
+Obsługiwane warianty płytki:
 
-- LCD RGB 7 cali, 1024x600,
-- dotyk po I2C, IRQ na GPIO4,
-- CAN/TWAI: TX GPIO20, RX GPIO19,
-- I2C: SDA GPIO8, SCL GPIO9,
-- przelacznik USB/CAN przez kontroler CH32V003 I/O na I2C `0x24`: EXIO5 musi byc ustawione wysoko dla CAN.
+- **ESP32-S3-Touch-LCD-7B (domyślny):** LCD RGB 1024×600, GT911, ekspander
+  CH32V003 pod I²C `0x24`. Zachowuje dotychczasowe piny, timingi i ustawienia.
+- **ESP32-S3-Touch-LCD-7:** LCD RGB 800×480, GT911 i ekspander CH422G.
+  Wybór wariantu znajduje się w `idf.py menuconfig` → `Wariant płytki ESP32-S3`.
 
-Uwaga: port USB i CAN wspoldziela linie GPIO19/20. Do programowania uzywaj portu
-UART/USB plytki albo przelacz EXIO5 w tryb USB zgodnie z dokumentacja Waveshare.
+Wspólne połączenia CAN/TWAI to TX GPIO20 i RX GPIO19, a I²C to SDA GPIO8 i
+SCL GPIO9. Na LCD-7 sygnały panelu RGB w kolejności GPIO `B0..B4, G0..G5,
+R0..R4` to `14, 38, 18, 17, 10, 39, 0, 45, 48, 47, 21, 1, 2, 42, 41, 40`;
+pozostałe sygnały to DE GPIO5, VSYNC GPIO3, HSYNC GPIO46 i PCLK GPIO7.
+GT911 ma IRQ GPIO4, domyślny adres I²C `0x5D` (adres alternatywny `0x14`) i
+reset z EXIO1 ekspandera. Na LCD-7 CH422G steruje także podświetleniem (EXIO2),
+resetem LCD (EXIO3), wyborem USB/CAN (EXIO5; stan wysoki wybiera CAN) i
+zasilaniem LCD (EXIO6). CH422G używa oddzielnych adresów poleceń I²C, m.in.
+WR-SET `0x24` i WR-IO `0x38`; nie jest zgodny z rejestrowym protokołem CH32V003.
+
+Waveshare podaje dla LCD-7 panel ST7262 800×480 i timingi RGB: PCLK 16 MHz,
+HSYNC 4/8/8, VSYNC 4/8/8 (szerokość impulsu/tylny/przedni porch) oraz aktywny
+zboczem opadającym PCLK. Na płytce jest również RS-485: RX GPIO15 i TX GPIO16.
+Nie jest to RS-232; odbiornik RS-232 wymaga zewnętrznego transceivera MAX3232
+i pinów UART wybranych w konfiguracji firmware. Nie łącz napięć RS-232
+bezpośrednio z ESP32.
 
 ## Obudowa do druku 3D
 
@@ -45,11 +58,11 @@ zasilaniem SY8205 i złączem RS-232; przewidziany materiał to PETG.
 
 ## Struktura
 
-- `main/board_pins.hpp` - stale sprzetowe dla ESP32-S3-Touch-LCD-7B.
+- `main/board_pins.hpp` - stałe sprzętowe zależne od wariantu LCD-7/7B.
 - `main/app_main.cpp` - punkt startowy aplikacji.
 - `main/board_support.*` - inicjalizacja I2C, ekspandera IO i trybu CAN.
 - `main/can_monitor.*` - uruchomienie TWAI przez AgIsoStack++.
-- `main/lcd_panel.*` - sterownik RGB565 panelu 1024x600 z dwoma buforami w PSRAM.
+- `main/lcd_panel.*` - sterownik RGB565 panelu z dwoma buforami w PSRAM.
 - `main/touch_gt911.*` - inicjalizacja i diagnostyka dotyku GT911.
 - `main/isobus_terminal_server.*` - serwer VT AgIsoStack++, w tym obiekty AUX-N.
 - `main/vt_scene_renderer.*` - renderer podstawowych obiektow VT i mapa obszarow dotyku.
@@ -90,6 +103,19 @@ idf.py build
 idf.py flash monitor
 ```
 
+Powyższe polecenia używają domyślnego wariantu 7B. Dla ESP32-S3-Touch-LCD-7
+użyj osobnego katalogu budowania i dołącz ustawienia wariantu (8 MB flash,
+PSRAM 80 MHz oraz tablicę partycji mieszczącą się w pamięci 8 MB):
+
+```sh
+idf.py -B build-lcd7 \
+  -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.lcd7.defaults" build
+```
+
+Można również wybrać płytkę w `idf.py menuconfig`; dla LCD-7 rozmiar obszaru VT
+jest stały `480×480` i rysowany 1:1. Opcja `600×600` pozostaje dostępna tylko
+dla 7B.
+
 ## Jeden plik firmware do release
 
 Po zbudowaniu wariantu RS-232 można utworzyć kompletny obraz zawierający
@@ -111,7 +137,7 @@ Do GitHub Release należy dołączyć ten jeden plik, nazwany na przykład
 trybu DIO i częstotliwości 80 MHz.
 
 Build zostal zweryfikowany na ESP-IDF 5.5 dla ESP32-S3. Firmware inicjalizuje
-panel RGB 1024x600 zgodnie z parametrami Waveshare, pokazuje logo startowe
+panel RGB wybrany w Kconfig, pokazuje logo startowe
 i ekran oczekiwania na working set maszyny,
 i sprawdza kontroler dotyku GT911 po I2C. Po zaladowaniu IOP renderer obsluguje
 DataMask/AlarmMask, Container, SoftKeyMask i Key, Button, Input Boolean/String/Number,
@@ -121,12 +147,16 @@ Pole Input Boolean przelacza lokalnie stan `ON/OFF` i wysyla do ECU nowa wartosc
 
 ## Rozmiar obszaru VT
 
-Menu terminala pozwala wybrac logiczny obszar roboczy `480x480` albo `600x600`.
-Oba tryby wykorzystuja pelna wysokosc 600 pikseli wyswietlacza:
+Na wariancie 7B menu terminala pozwala wybrać logiczny obszar roboczy `480×480`
+albo `600×600`. Oba tryby wykorzystują pełną wysokość 600 pikseli wyświetlacza:
 
 - `480x480` jest domyslny i jest skalowany na LCD do `600x600`, co zapewnia
   zgodnosc z pulami zaprojektowanymi na standardowy obszar 480 pikseli,
 - `600x600` jest rysowany 1:1 i jest zglaszany ECU w odpowiedzi VT Get Hardware.
+
+Na wariancie 7 ekran ma 800×480 pikseli. Obszar VT `480×480` jest rysowany
+1:1, a interfejs diagnostyczny i menu są dopasowane do rozdzielczości. Opcja
+`600×600` jest ukryta i nie jest zgłaszana ECU.
 
 Zmiana rozmiaru usuwa zapisane pule obiektow i wymaga ponownego uruchomienia
 terminala. ECU z AgIsoStack++, ktore ma pule zaprojektowana dla `480x480`, powinno
@@ -190,6 +220,14 @@ maszyny i dopuszczalnego nakladania. Szczegoly podlaczenia i konfiguracji sa w
 
 ## Zrodla projektowe
 
+- Waveshare ESP32-S3-Touch-LCD-7, dokumentacja:
+  https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-7
+- Oficjalna konfiguracja Waveshare panelu RGB, GT911 i CH422G:
+  https://github.com/waveshareteam/ESP32-S3-Touch-LCD-7/blob/main/examples/Arduino/libraries/ESP32_Display_Panel/src/board/supported/waveshare/BOARD_WAVESHARE_ESP32_S3_TOUCH_LCD_7.h
+- Oficjalny sterownik CH422G, adresy poleceń I²C:
+  https://github.com/esp-arduino-libs/ESP32_IO_Expander/blob/master/src/port/esp_io_expander_ch422g.c
+- Przykład Waveshare RS-485 (RX GPIO15, TX GPIO16):
+  https://github.com/waveshareteam/ESP32-S3-Touch-LCD-7/blob/main/examples/Arduino/examples/02_RS485_Test/02_RS485_Test.ino
 - Waveshare ESP32-S3-Touch-LCD-7B: https://docs.waveshare.com/ESP32-S3-Touch-LCD-7B
 - AgIsoStack++: https://agisostack.com
 - AgIsoStack++ installation: https://agisostack-plus-plus.readthedocs.io/en/latest/Installation.html

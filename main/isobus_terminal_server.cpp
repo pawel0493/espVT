@@ -48,7 +48,10 @@ constexpr std::uint32_t OBJECT_POOL_PROGRESS_UPDATE_MS = 200;
 
 std::uint16_t configured_data_mask_size()
 {
-    return vt_scene_renderer::get_terminal_settings().data_mask_size == 600 ? 600 : 480;
+    return board::LCD_SUPPORTS_600_DATA_MASK &&
+                   (vt_scene_renderer::get_terminal_settings().data_mask_size == 600)
+               ? 600
+               : 480;
 }
 
 std::uint8_t configured_soft_key_size()
@@ -662,7 +665,8 @@ void load_terminal_settings()
         }
         std::uint16_t data_mask_size = 0;
         if ((nvs_get_u16(handle, "mask_size", &data_mask_size) == ESP_OK) &&
-            ((data_mask_size == 480U) || (data_mask_size == 600U)))
+            ((data_mask_size == 480U) ||
+             (board::LCD_SUPPORTS_600_DATA_MASK && (data_mask_size == 600U))))
         {
             settings.data_mask_size = data_mask_size;
         }

@@ -38,6 +38,8 @@ constexpr int SOFT_KEY_ROWS = 6;
 constexpr int CONTROL_PADDING = 2;
 constexpr int LEFT_INFO_WIDTH = 200;
 constexpr int VT_ORIGIN_X = 0;
+constexpr int TERMINAL_UI_DESIGN_WIDTH = 1024;
+constexpr int TERMINAL_UI_DESIGN_HEIGHT = 600;
 constexpr std::uint16_t CHROME_BACKGROUND = 0x2945;
 constexpr std::uint16_t CHROME_DARK = 0x1082;
 constexpr std::uint16_t CHROME_ACTIVE = 0x05E0;
@@ -58,6 +60,7 @@ std::mutex hit_targets_mutex;
 std::vector<ScreenRect> hit_targets;
 bool scene_visible = false;
 std::atomic_bool terminal_menu_open{ false };
+std::atomic_bool terminal_ui_scaled{ false };
 vt_scene_renderer::TerminalSettings terminal_settings;
 vt_scene_renderer::TerminalAction terminal_page = vt_scene_renderer::TerminalAction::ShowMachines;
 std::string terminal_notice;
@@ -79,6 +82,20 @@ struct InputEditorState
 std::mutex input_editor_mutex;
 InputEditorState input_editor;
 
+void apply_terminal_ui_transform()
+{
+    lcd_panel::set_view_transform_xy(0,
+                                     0,
+                                     board::LCD_WIDTH,
+                                     TERMINAL_UI_DESIGN_WIDTH,
+                                     board::LCD_HEIGHT,
+                                     TERMINAL_UI_DESIGN_HEIGHT);
+    terminal_ui_scaled.store(
+        (board::LCD_WIDTH != TERMINAL_UI_DESIGN_WIDTH) ||
+            (board::LCD_HEIGHT != TERMINAL_UI_DESIGN_HEIGHT),
+        std::memory_order_relaxed);
+}
+
 struct VTLayout
 {
     int data_mask_size;
@@ -98,10 +115,17 @@ struct VTLayout
 
 VTLayout current_layout()
 {
-    const int data_mask_size = terminal_settings.data_mask_size == 600 ? 600 : 480;
+    const int data_mask_size = board::LCD_SUPPORTS_600_DATA_MASK &&
+                                       (terminal_settings.data_mask_size == 600)
+                                   ? 600
+                                   : 480;
     const int soft_key_designator_size = data_mask_size / 8;
-    const int scale_numerator = data_mask_size == 480 ? 5 : 1;
-    const int scale_denominator = data_mask_size == 480 ? 4 : 1;
+    const int scale_numerator = !board::LCD_SUPPORTS_600_DATA_MASK
+                                    ? 1
+                                    : (data_mask_size == 480 ? 5 : 1);
+    const int scale_denominator = !board::LCD_SUPPORTS_600_DATA_MASK
+                                      ? 1
+                                      : (data_mask_size == 480 ? 4 : 1);
     constexpr int working_set_bar_screen_width = 136;
     const int working_set_bar_width = working_set_bar_screen_width * scale_denominator / scale_numerator;
     const int working_set_slot_height = working_set_bar_width;
@@ -1912,7 +1936,11 @@ void draw_page_title(const char *title, const char *subtitle)
     constexpr std::uint16_t PAGE = 0xFFFF;
     constexpr std::uint16_t DARK = 0x1082;
     constexpr std::uint16_t MUTED = 0x52AA;
-    lcd_panel::fill_rect(LEFT_INFO_WIDTH, 0, board::LCD_WIDTH - LEFT_INFO_WIDTH, board::LCD_HEIGHT, PAGE);
+    lcd_panel::fill_rect(LEFT_INFO_WIDTH,
+                         0,
+                         TERMINAL_UI_DESIGN_WIDTH - LEFT_INFO_WIDTH,
+                         TERMINAL_UI_DESIGN_HEIGHT,
+                         PAGE);
     lcd_panel::draw_text(LEFT_INFO_WIDTH + 28, 24, 3, title, DARK);
     lcd_panel::draw_text(LEFT_INFO_WIDTH + 30, 58, 2, subtitle, MUTED);
     lcd_panel::fill_rect(LEFT_INFO_WIDTH + 28, 88, board::LCD_WIDTH - LEFT_INFO_WIDTH - 56, 3, 0x3C86);
@@ -2044,12 +2072,17 @@ void render_terminal_page(std::vector<ScreenRect> &targets)
                        terminal_number,
                        vt_scene_renderer::TerminalAction::CycleTerminalNumber,
                        true);
+#if !CONFIG_ISOVT_BOARD_LCD_7
     char data_mask_size[48];
     std::snprintf(data_mask_size,
                   sizeof(data_mask_size),
                   "OBSZAR ROBOCZY: %u X %u",
                   static_cast<unsigned>(terminal_settings.data_mask_size),
                   static_cast<unsigned>(terminal_settings.data_mask_size));
+#endif
+#if CONFIG_ISOVT_BOARD_LCD_7
+    draw_value_row(LEFT_INFO_WIDTH + 28, 422, 760, "OBSZAR ROBOCZY", "480 X 480");
+#else
     draw_screen_button(targets,
                        LEFT_INFO_WIDTH + 28,
                        422,
@@ -2058,6 +2091,7 @@ void render_terminal_page(std::vector<ScreenRect> &targets)
                        data_mask_size,
                        vt_scene_renderer::TerminalAction::CycleDataMaskSize,
                        true);
+#endif
     char capabilities[64];
     std::snprintf(capabilities,
                   sizeof(capabilities),
@@ -2330,10 +2364,12 @@ void render_information_page()
 {
     draw_page_title("INFORMACJE", "MOZLIWOSCI I STAN TERMINALA");
     const esp_app_desc_t *app = esp_app_get_description();
+    char display[32];
+    std::snprintf(display, sizeof(display), "%d X %d DOTYKOWY", board::LCD_WIDTH, board::LCD_HEIGHT);
     draw_value_row(LEFT_INFO_WIDTH + 28, 112, 760, "OPROGRAMOWANIE", app ? app->project_name : "ESP ISOBUS VT", true);
     draw_value_row(LEFT_INFO_WIDTH + 28, 160, 760, "WERSJA VT",
                    terminal_settings.aux_o_legacy ? "ISO 11783-6 VT VERSION 2" : "ISO 11783-6 VT VERSION 6");
-    draw_value_row(LEFT_INFO_WIDTH + 28, 208, 760, "EKRAN", "1024 X 600 DOTYKOWY");
+    draw_value_row(LEFT_INFO_WIDTH + 28, 208, 760, "EKRAN", display);
     draw_value_row(LEFT_INFO_WIDTH + 28, 256, 760, "OBSZAR / SOFTKEY", "480 X 480 / 12 KLAWISZY");
     draw_value_row(LEFT_INFO_WIDTH + 28, 304, 760, "AUX",
                    terminal_settings.aux_o_legacy ? "AUX-O TYPE 1 (LEGACY)" : "AUX-N TYPE 2");
@@ -2350,8 +2386,9 @@ void render_terminal_menu(
     const std::vector<std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet>> &working_sets,
     const std::vector<std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet>> &auxiliary_working_sets)
 {
+    apply_terminal_ui_transform();
     lcd_panel::fill(CHROME_DARK);
-    lcd_panel::fill_rect(0, 0, LEFT_INFO_WIDTH, board::LCD_HEIGHT, CHROME_DARK);
+    lcd_panel::fill_rect(0, 0, LEFT_INFO_WIDTH, TERMINAL_UI_DESIGN_HEIGHT, CHROME_DARK);
     lcd_panel::draw_text(18, 18, 3, "ISOBUS VT", CHROME_TEXT);
     lcd_panel::draw_text(18, 52, 2, "MENU TERMINALA", CHROME_BORDER);
 
@@ -2404,7 +2441,11 @@ void render_terminal_menu(
 
     if (!terminal_notice.empty())
     {
-        lcd_panel::fill_rect(LEFT_INFO_WIDTH + 28, 560, board::LCD_WIDTH - LEFT_INFO_WIDTH - 56, 30, CHROME_DARK);
+        lcd_panel::fill_rect(LEFT_INFO_WIDTH + 28,
+                             560,
+                             TERMINAL_UI_DESIGN_WIDTH - LEFT_INFO_WIDTH - 56,
+                             30,
+                             CHROME_DARK);
         lcd_panel::draw_text(LEFT_INFO_WIDTH + 42, 568, 2, terminal_notice.c_str(), CHROME_TEXT);
     }
 }
@@ -2496,6 +2537,7 @@ void render_input_editor(std::vector<ScreenRect> &targets, RenderContext *contex
     targets.clear();
     lcd_panel::reset_view_transform();
     lcd_panel::reset_clip_rect();
+    apply_terminal_ui_transform();
     lcd_panel::fill(CHROME_DARK);
     constexpr int panel_x = 54;
     constexpr int panel_y = 24;
@@ -2658,6 +2700,7 @@ bool render(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet
         std::vector<ScreenRect> next_targets;
         lcd_panel::reset_view_transform();
         lcd_panel::reset_clip_rect();
+        apply_terminal_ui_transform();
         render_terminal_menu(next_targets, working_set, working_sets, auxiliary_working_sets);
         render_input_editor(next_targets);
         if (lcd_panel::present() != ESP_OK)
@@ -2673,6 +2716,7 @@ bool render(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet
         return true;
     }
 
+    terminal_ui_scaled.store(false, std::memory_order_relaxed);
     if (working_set == nullptr)
     {
         return false;
@@ -2799,6 +2843,13 @@ bool render(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet
 
 HitTarget hit_test(std::uint16_t x, std::uint16_t y)
 {
+    if (terminal_ui_scaled.load(std::memory_order_relaxed))
+    {
+        x = static_cast<std::uint16_t>(
+            static_cast<std::uint32_t>(x) * TERMINAL_UI_DESIGN_WIDTH / board::LCD_WIDTH);
+        y = static_cast<std::uint16_t>(
+            static_cast<std::uint32_t>(y) * TERMINAL_UI_DESIGN_HEIGHT / board::LCD_HEIGHT);
+    }
     std::lock_guard<std::mutex> lock(hit_targets_mutex);
     for (auto target = hit_targets.rbegin(); target != hit_targets.rend(); ++target)
     {
@@ -2876,7 +2927,14 @@ void apply_terminal_action(TerminalAction action)
             terminal_settings.terminal_number = static_cast<std::uint8_t>((terminal_settings.terminal_number % 32U) + 1U);
             break;
         case TerminalAction::CycleDataMaskSize:
-            terminal_settings.data_mask_size = terminal_settings.data_mask_size == 600 ? 480 : 600;
+            if (board::LCD_SUPPORTS_600_DATA_MASK)
+            {
+                terminal_settings.data_mask_size = terminal_settings.data_mask_size == 600 ? 480 : 600;
+            }
+            else
+            {
+                terminal_settings.data_mask_size = 480;
+            }
             break;
         case TerminalAction::DecreaseControlVolume:
             terminal_settings.control_volume = terminal_settings.control_volume >= 5U ?
@@ -2915,6 +2973,10 @@ void set_terminal_settings(const TerminalSettings &settings)
 {
     std::lock_guard<std::mutex> lock(scene_mutex);
     terminal_settings = settings;
+    if (!board::LCD_SUPPORTS_600_DATA_MASK)
+    {
+        terminal_settings.data_mask_size = 480;
+    }
 }
 
 TerminalSettings get_terminal_settings()

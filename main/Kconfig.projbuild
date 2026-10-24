@@ -1,5 +1,17 @@
 menu "ESP ISOBUS VT"
 
+choice ISOVT_BOARD
+    prompt "Wariant płytki ESP32-S3"
+    default ISOVT_BOARD_LCD_7B
+
+config ISOVT_BOARD_LCD_7
+    bool "Waveshare ESP32-S3-Touch-LCD-7 (800×480)"
+
+config ISOVT_BOARD_LCD_7B
+    bool "Waveshare ESP32-S3-Touch-LCD-7B (1024×600)"
+
+endchoice
+
 config ISOVT_ENABLE_AGISOSTACK
     bool "Enable AgIsoStack++ VT server adapter"
     default y

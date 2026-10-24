@@ -17,8 +17,6 @@
 namespace
 {
 constexpr char TAG[] = "gt911";
-constexpr std::uint8_t PRIMARY_ADDRESS = 0x5D;
-constexpr std::uint8_t BACKUP_ADDRESS = 0x14;
 constexpr std::uint16_t PRODUCT_ID_REGISTER = 0x8140;
 constexpr std::uint16_t TOUCH_STATUS_REGISTER = 0x814E;
 constexpr std::size_t MAX_TOUCH_POINTS = 5;
@@ -90,7 +88,10 @@ esp_err_t initialize_controller()
     ESP_RETURN_ON_ERROR(board::init_i2c(), TAG, "I2C initialization failed");
     ESP_RETURN_ON_ERROR(reset_and_select_primary_address(), TAG, "GT911 reset failed");
 
-    for (const std::uint8_t candidate_address : {PRIMARY_ADDRESS, BACKUP_ADDRESS})
+    for (const std::uint8_t candidate_address : {
+             board::TOUCH_I2C_ADDRESS_PRIMARY,
+             board::TOUCH_I2C_ADDRESS_BACKUP,
+         })
     {
         ESP_RETURN_ON_ERROR(add_device(candidate_address), TAG, "GT911 I2C device attach failed");
 

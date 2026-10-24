@@ -14,6 +14,8 @@
 namespace
 {
 constexpr char TAG[] = "vt_view";
+constexpr int VIEW_DESIGN_WIDTH = 1024;
+constexpr int VIEW_DESIGN_HEIGHT = 600;
 
 constexpr std::uint16_t COLOR_BACKGROUND = 0xFFFF;
 constexpr std::uint16_t COLOR_HEADER = 0x10A2;
@@ -55,8 +57,14 @@ void render_locked()
         return;
     }
 
+    lcd_panel::set_view_transform_xy(0,
+                                     0,
+                                     board::LCD_WIDTH,
+                                     VIEW_DESIGN_WIDTH,
+                                     board::LCD_HEIGHT,
+                                     VIEW_DESIGN_HEIGHT);
     lcd_panel::fill(COLOR_BACKGROUND);
-    lcd_panel::fill_rect(0, 0, board::LCD_WIDTH, 58, COLOR_HEADER);
+    lcd_panel::fill_rect(0, 0, VIEW_DESIGN_WIDTH, 58, COLOR_HEADER);
     lcd_panel::draw_text(32, 18, 3, "ISOBUS ACCESS TERMINAL", COLOR_TEXT);
     lcd_panel::draw_text(764, 18, 2, can_ready ? "CAN READY" : "CAN STARTING", can_ready ? COLOR_OK : COLOR_TEXT);
 
@@ -74,7 +82,7 @@ void render_locked()
     lcd_panel::draw_text(MENU_BUTTON_X + 26, MENU_BUTTON_Y + 121, 2, "N", COLOR_TEXT);
     lcd_panel::draw_text(MENU_BUTTON_X + 26, MENU_BUTTON_Y + 149, 2, "U", COLOR_TEXT);
 
-    lcd_panel::fill_rect(42, 394, board::LCD_WIDTH - 84, 3, COLOR_ACCENT);
+    lcd_panel::fill_rect(42, 394, VIEW_DESIGN_WIDTH - 84, 3, COLOR_ACCENT);
     if (object_pool_download_active)
     {
         constexpr int progress_x = 42;
@@ -105,6 +113,7 @@ void render_locked()
     lcd_panel::draw_text(42, 548, 2, can_signal_diagnostics.c_str(), COLOR_MUTED);
     lcd_panel::draw_text(42, 576, 1, gnss_status.c_str(), COLOR_MUTED);
 
+    lcd_panel::reset_view_transform();
     const esp_err_t present_result = lcd_panel::present();
     if (present_result != ESP_OK)
     {
@@ -420,6 +429,13 @@ bool is_idle_menu_touch(std::uint16_t x, std::uint16_t y)
     {
         idle_screen_visible = panel_ready && !working_set_visible;
         xSemaphoreGive(view_mutex);
+    }
+    if ((board::LCD_WIDTH != VIEW_DESIGN_WIDTH) || (board::LCD_HEIGHT != VIEW_DESIGN_HEIGHT))
+    {
+        x = static_cast<std::uint16_t>(
+            static_cast<std::uint32_t>(x) * VIEW_DESIGN_WIDTH / board::LCD_WIDTH);
+        y = static_cast<std::uint16_t>(
+            static_cast<std::uint32_t>(y) * VIEW_DESIGN_HEIGHT / board::LCD_HEIGHT);
     }
     return idle_screen_visible &&
            (x >= MENU_BUTTON_X) && (x < MENU_BUTTON_X + MENU_BUTTON_WIDTH) &&
