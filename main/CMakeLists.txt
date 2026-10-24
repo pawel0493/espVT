@@ -47,7 +47,6 @@ idf_component_register(
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-find_program(SIPS_EXECUTABLE sips REQUIRED)
 set(LOGO_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(LOGO_BMP "${LOGO_GENERATED_DIR}/logo.bmp")
 set(LOGO_HEADER "${LOGO_GENERATED_DIR}/logo_rgb565.hpp")
@@ -55,10 +54,13 @@ add_custom_command(
     OUTPUT "${LOGO_HEADER}"
     BYPRODUCTS "${LOGO_BMP}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGO_GENERATED_DIR}"
-    COMMAND ${SIPS_EXECUTABLE} -s format bmp "${CMAKE_SOURCE_DIR}/logo.png" --out "${LOGO_BMP}"
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/png_to_bmp.py"
+            "${CMAKE_SOURCE_DIR}/logo.png" "${LOGO_BMP}"
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/bmp_to_rgb565.py"
             "${LOGO_BMP}" "${LOGO_HEADER}" --max-width 720 --max-height 280 --padding 12
-    DEPENDS "${CMAKE_SOURCE_DIR}/logo.png" "${CMAKE_SOURCE_DIR}/tools/bmp_to_rgb565.py"
+    DEPENDS "${CMAKE_SOURCE_DIR}/logo.png"
+            "${CMAKE_SOURCE_DIR}/tools/png_to_bmp.py"
+            "${CMAKE_SOURCE_DIR}/tools/bmp_to_rgb565.py"
     COMMENT "Preparing RGB565 boot logo"
     VERBATIM
 )
