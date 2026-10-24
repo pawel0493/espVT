@@ -496,16 +496,16 @@ esp_err_t init()
 
     esp_lcd_rgb_panel_config_t config = {};
     config.clk_src = LCD_CLK_SRC_DEFAULT;
-    config.timings.pclk_hz = 30 * 1000 * 1000;
+    config.timings.pclk_hz = board::LCD_PCLK_HZ;
     config.timings.h_res = board::LCD_WIDTH;
     config.timings.v_res = board::LCD_HEIGHT;
-    config.timings.hsync_pulse_width = 162;
-    config.timings.hsync_back_porch = 152;
-    config.timings.hsync_front_porch = 48;
-    config.timings.vsync_pulse_width = 45;
-    config.timings.vsync_back_porch = 13;
-    config.timings.vsync_front_porch = 3;
-    config.timings.flags.pclk_active_neg = true;
+    config.timings.hsync_pulse_width = board::LCD_HSYNC_PULSE_WIDTH;
+    config.timings.hsync_back_porch = board::LCD_HSYNC_BACK_PORCH;
+    config.timings.hsync_front_porch = board::LCD_HSYNC_FRONT_PORCH;
+    config.timings.vsync_pulse_width = board::LCD_VSYNC_PULSE_WIDTH;
+    config.timings.vsync_back_porch = board::LCD_VSYNC_BACK_PORCH;
+    config.timings.vsync_front_porch = board::LCD_VSYNC_FRONT_PORCH;
+    config.timings.flags.pclk_active_neg = board::LCD_PCLK_ACTIVE_NEG;
     config.data_width = 16;
     config.bits_per_pixel = 16;
     config.num_fbs = 2;
@@ -513,18 +513,14 @@ esp_err_t init()
     config.dma_burst_size = 64;
     config.sram_trans_align = 4;
     config.psram_trans_align = 64;
-    config.hsync_gpio_num = GPIO_NUM_46;
-    config.vsync_gpio_num = GPIO_NUM_3;
-    config.de_gpio_num = GPIO_NUM_5;
-    config.pclk_gpio_num = GPIO_NUM_7;
+    config.hsync_gpio_num = board::LCD_HSYNC_GPIO;
+    config.vsync_gpio_num = board::LCD_VSYNC_GPIO;
+    config.de_gpio_num = board::LCD_DE_GPIO;
+    config.pclk_gpio_num = board::LCD_PCLK_GPIO;
     config.disp_gpio_num = -1;
-    const int data_pins[] = {
-        GPIO_NUM_14, GPIO_NUM_38, GPIO_NUM_18, GPIO_NUM_17,
-        GPIO_NUM_10, GPIO_NUM_39, GPIO_NUM_0, GPIO_NUM_45,
-        GPIO_NUM_48, GPIO_NUM_47, GPIO_NUM_21, GPIO_NUM_1,
-        GPIO_NUM_2, GPIO_NUM_42, GPIO_NUM_41, GPIO_NUM_40,
-    };
-    std::copy(std::begin(data_pins), std::end(data_pins), std::begin(config.data_gpio_nums));
+    std::copy(std::begin(board::LCD_DATA_GPIO),
+              std::end(board::LCD_DATA_GPIO),
+              std::begin(config.data_gpio_nums));
     config.flags.fb_in_psram = true;
 
     ESP_RETURN_ON_ERROR(esp_lcd_new_rgb_panel(&config, &panel), TAG, "RGB panel create failed");
@@ -561,8 +557,8 @@ esp_err_t init()
     ESP_RETURN_ON_ERROR(esp_lcd_rgb_panel_register_event_callbacks(panel, &callbacks, nullptr), TAG,
                         "RGB frame callback registration failed");
 
-    ESP_LOGI(TAG, "RGB LCD ready: %dx%d, 30 MHz, double RGB565 framebuffer with bounce DMA",
-             board::LCD_WIDTH, board::LCD_HEIGHT);
+    ESP_LOGI(TAG, "RGB LCD ready: %dx%d, %u MHz, double RGB565 framebuffer with bounce DMA",
+             board::LCD_WIDTH, board::LCD_HEIGHT, static_cast<unsigned>(board::LCD_PCLK_HZ / 1000000U));
     return ESP_OK;
 }
 
